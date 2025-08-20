@@ -2,9 +2,6 @@ import pandas as pd
 import re
 
 
-# ==============================
-# 1. XỬ LÝ FILE LỆNH SẢN XUẤT
-# ==============================
 def extract_dates(val):
     """Trích xuất ngày bắt đầu/kết thúc từ chuỗi thời gian."""
     if pd.isna(val):
@@ -20,11 +17,10 @@ def extract_dates(val):
         start = end = pd.to_datetime(found[0], dayfirst=True, errors="coerce")
     else:
         start = end = None
-
     return start, end
 
-
-def process_lsx(file_path, sheet_name="02.08.25", skip_rows=6):
+# XỬ LÝ FILE LỆNH SẢN XUẤT
+def process_lsx(file_path, sheet_name= 3 , skip_rows=6):
     """Đọc và xử lý file LSX."""
     time_col = "Thời gian dự kiến SX\nTime/Date"
     df = pd.read_excel(file_path, sheet_name=sheet_name, skiprows=skip_rows)
@@ -75,11 +71,7 @@ def process_lsx(file_path, sheet_name="02.08.25", skip_rows=6):
 
     return df_req
 
-
-
-# ==============================
-# 2. XỬ LÝ FILE SẢN LƯỢNG THỰC TẾ
-# ==============================
+#  XỬ LÝ FILE SẢN LƯỢNG THỰC TẾ
 def process_actual(file_path, sheet_name="Data"):
     """Đọc và xử lý file sản lượng thực tế."""
     df = pd.read_excel(file_path, sheet_name=sheet_name).dropna(how="all")
@@ -99,9 +91,8 @@ def process_actual(file_path, sheet_name="Data"):
     total_actual = total_actual.rename(columns={"Sản lượng thực tế": "Tổng sản lượng thực tế"})
 
     return df_daily, total_actual
-#3 XỬ LÝ FILE SẢN LƯỢNG KHO
-import pandas as pd
 
+# XỬ LÝ FILE SẢN LƯỢNG KHO
 def xu_ly_ton_kho(file_sanluong, file_kho):
     # Đọc dữ liệu
     df_sanluong = pd.read_excel(file_sanluong)
@@ -155,14 +146,8 @@ def xu_ly_ton_kho(file_sanluong, file_kho):
         summary[col] = summary[col].astype(int)
 
     return summary
-    # # 5️⃣ Xuất ra file Excel
-    # with pd.ExcelWriter(output_path) as writer:
-    #     df_chua_nhap_sum.to_excel(writer, sheet_name="Chưa nhập kho", index=False)
-    #     summary.to_excel(writer, sheet_name="Tồn kho theo Order", index=False)
 
-# ==============================
-# 3. PHÂN LOẠI TRẠNG THÁI
-# ==============================
+# PHÂN LOẠI TRẠNG THÁI
 def classify(row):
     """Xác định trạng thái sản xuất."""
     if row["Sản lượng thực tế"] < row["SL trung bình/ngày"]:
@@ -173,12 +158,8 @@ def classify(row):
         return f"Vượt tổng {diff:.0f} KG"
     else:
         return "Làm hơn tiến độ"
-
-# ==============================
-# 4. TỔNG HỢP BÁO CÁO
-
-# ==============================
-def generate_report(lsx_path, actual_path, output_path="bao_cao_san_luong_theo_ngay123.xlsx"):
+#  TỔNG HỢP BÁO CÁO
+def generate_report(lsx_path, actual_path):
     """Tạo báo cáo sản lượng theo ngày."""
     df_req = process_lsx(lsx_path)
     df_daily, total_actual = process_actual(actual_path)
@@ -189,26 +170,4 @@ def generate_report(lsx_path, actual_path, output_path="bao_cao_san_luong_theo_n
     # Phân loại trạng thái
     df_report["Trạng thái"] = df_report.apply(classify, axis=1)
     df_report = df_report[df_report["SL trung bình/ngày"].notna()]
-
-    df_report.to_excel(output_path, index=False)
-    print(f"Đã xuất báo cáo: {output_path}")
-
-# ==============================
-# 5. CHẠY CHÍNH
-# ==============================
-# if __name__ == "__main__":
-#     generate_report(
-#         lsx_path="05.07.2025 LSX XC NM.HRC1 (ok).xlsx",
-#         actual_path="ZBC04B_EXPORT_20250805_133956.xlsx"
-#     )
-
-if __name__ == "__main__":
-    xu_ly_ton_kho(
-    file_sanluong="EXPORT_20250812_085402.xlsx",
-    file_kho="ZPP04.xlsx",
-    output_path="ket_qua_ton_kho_theo_order.xlsx"
-    )
-    generate_report(
-        lsx_path="02.08.2025 LSX XC NM.HRC1 1.xlsx",
-        actual_path="EXPORT_20250812_085402.xlsx"
-    )
+    return df_report

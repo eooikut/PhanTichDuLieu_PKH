@@ -1,17 +1,24 @@
 from flask import Flask, render_template, request
 import pandas as pd
 from uuid import uuid4
-from final import xu_ly_ton_kho
-
+from processordata import xu_ly_ton_kho
+from processordata import generate_report
+from processordata import process_actual
+from processordata import process_lsx
 app = Flask(__name__)
 
 # File dữ liệu
-df = pd.read_excel("bao_cao_san_luong_theo_ngay123.xlsx")
+# df = pd.read_excel("bao_cao_san_luong_theo_ngay123.xlsx")
+
+FILE_LSX= "02.08.2025 LSX XC NM.HRC1 1.xlsx"
+# FILE_LSX= "05.07.2025 LSX XC NM.HRC1 (ok).xlsx"
 FILE_SANLUONG = "EXPORT_20250812_085402.xlsx"
 FILE_KHO = "ZPP04.xlsx"
 
 @app.route("/", methods=["GET"])
 def xem_theo_ngay():
+    # df1=process_lsx()
+    df= generate_report(FILE_LSX,FILE_SANLUONG)
     selected_date = request.args.get("date")
     orders = []
     total_loss = 0
@@ -61,15 +68,15 @@ def tien_do_order():
         "tiendo_order.html",
         table_html=table_html
     )
-@app.route('/test')
-def index():
-    # Đọc file Excel mapping
-    df = pd.read_excel("mapping.xlsx")
+# @app.route('/test')
+# def index():
+#     # Đọc file Excel mapping
+#     df = pd.read_excel("mapping.xlsx")
     
-    # Chuyển sang list dict để render
-    data = df.to_dict(orient="records")
+#     # Chuyển sang list dict để render
+#     data = df.to_dict(orient="records")
     
-    return render_template("index.html", data=data)
+#     return render_template("index.html", data=data)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0",port=5001, debug=True)
