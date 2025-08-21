@@ -1,0 +1,15 @@
+<h2>Kết quả cho LSX: {{ name }}</h2>
+<table border="1">
+  <tr>
+    {% for col in data[0].keys() %}
+      <th>{{ col }}</th>
+    {% endfor %}
+  </tr>
+  {% for row in data %}
+    <tr>
+      {% for val in row.values() %}
+        <td>{{ val }}</td>
+      {% endfor %}
+    </tr>
+  {% endfor %}
+</table>

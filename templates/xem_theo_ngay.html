@@ -1,111 +1,72 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <title>Xem trạng thái theo ngày</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            background-color: #f8f9fa;
-        }
-        h2 {
-            margin-bottom: 20px;
-            color: #343a40;
-        }
-        table {
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        thead {
-            background-color: #007bff;
-            color: white;
-        }
-        tbody tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-        .status-badge {
-            font-weight: bold;
-            padding: 5px 10px;
-            border-radius: 6px;
-        }
-        .status-loss {
-            background-color: #dc3545;
-            color: white;
-        }
-        .status-ahead {
-            background-color: #28a745;
-            color: white;
-        }
-        .status-progress {
-            background-color: #ffc107;
-            color: black;
-        }
-        .summary {
-            margin-top: 20px;
-            padding: 15px;
-            background: #e9ecef;
-            border-radius: 8px;
-            font-weight: bold;
-        }
-    </style>
-</head>
-<body class="container py-4">
+{% extends "base.html" %}
 
-    <h2>📅 Xem trạng thái sản xuất theo ngày</h2>
+{% block title %}Xem trạng thái theo ngày{% endblock %}
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <!-- Form chọn ngày -->
-        <form method="GET" action="{{ url_for('xem_theo_ngay') }}" class="d-flex align-items-center">
-            <label for="date" class="me-2 fw-bold">Chọn ngày:</label>
-            <input type="date" id="date" name="date" value="{{ selected_date }}" class="form-control me-2" required>
-            <button type="submit" class="btn btn-success">Xem</button>
-        </form>
+{% block content %}
+<div class="container py-4">
+    <h2 class="mb-4 text-primary fw-bold">
+        📅 Xem trạng thái sản xuất theo ngày
+    </h2>
 
-        <!-- Nút chuyển sang module 2 -->
-        <a href="{{ url_for('tien_do_order') }}" class="btn btn-primary">
-            📊 Xem tiến độ tổng Order
-        </a>
-    </div>
-
-    {% if orders %}
-    <table class="table table-bordered table-hover">
-        <thead>
-            <tr>
-                <th>Order</th>
-                <th>SL Trung bình/ngày (kg)</th>
-                <th>SL Thực tế/ngày (kg)</th>
-                <th>Trạng thái</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for order in orders %}
-            <tr>
-                <td>{{ order.Order }}</td>
-                <td>{{ "{:,.0f}".format(order['SL trung bình/ngày']) }}</td>
-                <td>{{ "{:,.0f}".format(order['Sản lượng thực tế']) }}</td>
-                <td>
-                    {% if "Thất thoát" in order['Trạng thái'] %}
-                        <span class="status-badge status-loss">{{ order['Trạng thái'] }}</span>
-                    {% elif "Vượt" in order['Trạng thái'] %}
-                        <span class="status-badge status-ahead">{{ order['Trạng thái'] }}</span>
-                    {% else %}
-                        <span class="status-badge status-progress">{{ order['Trạng thái'] }}</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <div class="summary">
-        Tổng thất thoát ngày {{ selected_date }}: {{ "{:,.0f}".format(total_loss) }} kg
-    </div>
+    {% if not has_data %}
+        <div class="alert alert-warning mt-4 shadow-sm">
+            ⚠️ Chưa có dữ liệu nào được tải lên. 
+            Vui lòng <a href="{{ url_for('upload_files') }}" class="alert-link">tải lên bộ dữ liệu LSX tại đây</a>.
+        </div>
     {% else %}
-    <div class="alert alert-warning">
-        ⛔ Không có dữ liệu cho ngày {{ selected_date }}
-    </div>
-    {% endif %}
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <form method="GET" action="{{ url_for('xem_theo_ngay') }}" class="d-flex align-items-center gap-2">
+                <label for="date" class="fw-bold me-2">Chọn ngày:</label>
+                <input type="date" id="date" name="date" value="{{ selected_date }}" 
+                       class="form-control form-control-sm" required>
+                <button type="submit" class="btn btn-success btn-sm px-3">Xem</button>
+            </form>
+            <a href="{{ url_for('tien_do_order') }}" class="btn btn-primary btn-sm px-3">
+                📊 Xem tiến độ tổng Order
+            </a>
+        </div>
 
-</body>
-</html>
+        {% if orders %}
+            <div class="table-responsive shadow-sm rounded">
+                <table class="table table-bordered table-hover align-middle">
+                    <thead class="table-dark text-center">
+                        <tr>
+                            <th>Order</th>
+                            <th>SL Trung bình/ngày (kg)</th>
+                            <th>SL Thực tế/ngày (kg)</th>
+                            <th>Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-center">
+                        {% for order in orders %}
+                        <tr>
+                            <td class="fw-bold">{{ order.Order }}</td>
+                            <td>{{ "{:,.0f}".format(order['SL trung bình/ngày']) }}</td>
+                            <td>{{ "{:,.0f}".format(order['Sản lượng thực tế']) }}</td>
+                            <td>
+                                {% if "Thất thoát" in order['Trạng thái'] %}
+                                    <span class="badge bg-danger px-3 py-2">{{ order['Trạng thái'] }}</span>
+                                {% elif "Vượt" in order['Trạng thái'] %}
+                                    <span class="badge bg-success px-3 py-2">{{ order['Trạng thái'] }}</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark px-3 py-2">{{ order['Trạng thái'] }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="alert alert-info mt-4 shadow-sm">
+                <strong>Tổng thất thoát ngày {{ selected_date }}:</strong> 
+                {{ "{:,.0f}".format(total_loss) }} kg
+            </div>
+        {% else %}
+            <div class="alert alert-secondary shadow-sm">
+                ⛔ Không có dữ liệu cho ngày {{ selected_date }}
+            </div>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
