@@ -6,6 +6,7 @@ from uuid import uuid4
 from werkzeug.utils import secure_filename
 from processordata import  generate_report, load_data
 from datetime import datetime
+from openpyxl import load_workbook
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
@@ -34,19 +35,35 @@ def get_lsx_by_id(lsx_id):
 def xem_theo_ngay():
     metadata = load_metadata()
     if not metadata:
-        return render_template("xem_theo_ngay.html",has_data=False)
+        return render_template("xem_theo_ngay.html", has_data=False)
 
-    latest = metadata[-1]
-    df = generate_report(latest["lsx"], latest["sanluong"])
-
+    # Lấy lsx_id từ request (nếu không có thì mặc định ALL)
+    selected_lsx = request.args.get("lsx_id", "ALL")
     selected_date = request.args.get("date")
+
+    # Chuẩn bị DataFrame theo LSX
+    dfs = []
+    if selected_lsx == "ALL":
+        for entry in metadata:
+            df = generate_report(entry["lsx"], entry["sanluong"])
+            df["lsx_id"] = entry["id"]  # thêm cột để biết thuộc LSX nào
+            dfs.append(df)
+        df_all = pd.concat(dfs, ignore_index=True)
+    else:
+        entry = get_lsx_by_id(selected_lsx)
+        if not entry:
+            return render_template("xem_theo_ngay.html", has_data=False)
+        df_all = generate_report(entry["lsx"], entry["sanluong"])
+        df_all["lsx_id"] = entry["id"]
+
+    # Bắt đầu xử lý lọc ngày
     orders = []
     total_loss = 0
     seen_orders = set()
 
     if selected_date:
-        df['Ngày'] = df['Ngày'].astype(str)
-        filtered = df[df['Ngày'] == selected_date]
+        df_all['Ngày'] = df_all['Ngày'].astype(str)
+        filtered = df_all[df_all['Ngày'] == selected_date]
 
         if not filtered.empty:
             for _, row in filtered.iterrows():
@@ -70,15 +87,21 @@ def xem_theo_ngay():
                         "Order": order_id,
                         "SL trung bình/ngày": sl_tb,
                         "Sản lượng thực tế": sl_tt,
-                        "Trạng thái": trang_thai
+                        "Trạng thái": trang_thai,
+                        "LSX": row.get("lsx_id", "")
                     })
 
     return render_template(
         "xem_theo_ngay.html",
         selected_date=selected_date,
+        selected_lsx=selected_lsx,
+        lsx_list=[{"id": "ALL", "name": "ALL LSX"}] + [
+            {"id": entry["id"], "name": entry.get("name", entry["id"])}
+            for entry in metadata
+        ],
         orders=orders,
         total_loss=total_loss,
-         has_data=True,
+        has_data=True,
         uuid=str(uuid4())
     )
 
@@ -97,11 +120,13 @@ def upload_files():
         lsx_file = request.files.get("lsx_file")
         sl_file = request.files.get("sl_file")
         kho_file = request.files.get("kho_file")
-        so_file = request.files.get("so_file")   # 🔹 Thêm file SO
-        name = request.form.get("lsx_name")
-
-        if not all([lsx_file, sl_file, kho_file, so_file, name]):
-            return "Thiếu thông tin upload!", 400
+        so_file = request.files.get("so_file")  
+       
+        if not (lsx_file and lsx_file.filename and 
+        sl_file and sl_file.filename and
+        kho_file and kho_file.filename and
+        so_file and so_file.filename):
+            return "Thiếu file upload!", 400
 
         # 🔹 Tạo thư mục theo ID
         lsx_id = str(uuid4())
@@ -112,12 +137,24 @@ def upload_files():
         lsx_path = os.path.join(folder, "lsx.xlsx").replace("\\", "/")
         sl_path = os.path.join(folder, "sanluong.xlsx").replace("\\", "/")
         kho_path = os.path.join(folder, "kho.xlsx").replace("\\", "/")
-        so_path = os.path.join(folder, "so.xlsx").replace("\\", "/")  # 🔹 Thêm đường dẫn SO
+        so_path = os.path.join(folder, "so.xlsx").replace("\\", "/")
 
         lsx_file.save(lsx_path)
         sl_file.save(sl_path)
         kho_file.save(kho_path)
-        so_file.save(so_path)  # 🔹 Lưu file SO
+        so_file.save(so_path)
+
+            # 🔹 Lấy tên LSX từ dòng 3 của file LSX
+        try:
+        # đọc sheet thứ 3 (index=2 vì python bắt đầu từ 0)
+            df_tmp = load_workbook(lsx_path, data_only=True)
+            df_tm= df_tmp.worksheets[3]
+        # lấy dòng 3 (index=2) trong sheet 3
+            name = df_tm["B3"].value
+            if not name:
+                name = f"LSX_{lsx_id}"
+        except Exception as e:
+                name = f"LSX_{lsx_id}" 
 
         # 🔹 Lưu metadata
         metadata = load_metadata()
@@ -127,19 +164,17 @@ def upload_files():
             "lsx": lsx_path,
             "sanluong": sl_path,
             "kho": kho_path,
-            "so": so_path,   # 🔹 Thêm metadata SO
+            "so": so_path,
             "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
         save_metadata(metadata)
 
         # 🔹 Tạo báo cáo và lưu log
-        generate_report(lsx_path, sl_path)  
+        generate_report(lsx_path, sl_path, lsx_name_override=name)
 
         return redirect(url_for("xem_theo_ngay"))
 
     return render_template("upload.html")
-
-
 
 @app.route("/chon_lsx", methods=["GET"])
 def select_lsx():

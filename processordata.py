@@ -141,7 +141,7 @@ def classify(row):
 # 4. TỔNG HỢP BÁO CÁO
 
 # ==============================
-def generate_report(lsx_path, actual_path):
+def generate_report(lsx_path, actual_path,lsx_name_override=None):
     df_req = process_lsx(lsx_path)                  
     df_daily, total_actual = process_actual(actual_path)  
 
