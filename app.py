@@ -55,7 +55,7 @@ def xem_theo_ngay():
             return render_template("xem_theo_ngay.html", has_data=False)
         df_all = generate_report(entry["lsx"], entry["sanluong"])
         df_all["lsx_id"] = entry["id"]
-
+    df_all["Order"] = pd.to_numeric(df_all["Order"], errors="coerce").astype("Int64")
     # Bắt đầu xử lý lọc ngày
     orders = []
     total_loss = 0
