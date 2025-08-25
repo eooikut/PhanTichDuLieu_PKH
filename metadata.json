@@ -1,16 +1,12 @@
 [
   {
-    "id": "20c63e47-676f-405e-bcf9-b79ffb32a422",
+    "id": "2a7e42ee-de12-40c7-828a-875a5c31074c",
     "name": "02.08.2025",
-    "lsx": "uploads/20c63e47-676f-405e-bcf9-b79ffb32a422/lsx.xlsx",
-    "sanluong": "uploads/20c63e47-676f-405e-bcf9-b79ffb32a422/sanluong.xlsx",
-    "kho": "uploads/20c63e47-676f-405e-bcf9-b79ffb32a422/kho.xlsx"
-  },
-  {
-    "id": "fbd80640-d3f7-4cb6-a6c9-7c4ac53c096b",
-    "name": "01.08.2025",
-    "lsx": "uploads/fbd80640-d3f7-4cb6-a6c9-7c4ac53c096b/lsx.xlsx",
-    "sanluong": "uploads/fbd80640-d3f7-4cb6-a6c9-7c4ac53c096b/sanluong.xlsx",
-    "kho": "uploads/fbd80640-d3f7-4cb6-a6c9-7c4ac53c096b/kho.xlsx"
+    "lsx": "uploads/2a7e42ee-de12-40c7-828a-875a5c31074c/lsx.xlsx",
+    "sanluong": "uploads/2a7e42ee-de12-40c7-828a-875a5c31074c/sanluong.xlsx",
+    "kho": "uploads/2a7e42ee-de12-40c7-828a-875a5c31074c/kho.xlsx",
+    "so": "uploads/2a7e42ee-de12-40c7-828a-875a5c31074c/so.xlsx",
+    "uploaded_at": "2025-08-23 11:01:48"
   }
+
 ]

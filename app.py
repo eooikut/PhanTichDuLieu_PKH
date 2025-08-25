@@ -4,8 +4,8 @@ import os
 import json
 from uuid import uuid4
 from werkzeug.utils import secure_filename
-from processordata import xu_ly_ton_kho, generate_report
-
+from processordata import  generate_report, load_data
+from datetime import datetime
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
@@ -86,14 +86,9 @@ def xem_theo_ngay():
 @app.route("/tiendo_order")
 def tien_do_order():
     metadata = load_metadata()
-    if not metadata:
-        return render_template("no_data.html")
-
     latest = metadata[-1]
-    df = xu_ly_ton_kho(latest["sanluong"], latest["kho"])
-    table_html = df.to_html(classes="table table-striped", index=False)
-
-    return render_template("tiendo_order.html", table_html=table_html)
+    grouped = load_data(latest["sanluong"], latest["kho"],latest["so"])
+    return render_template('tiendo_order.html', grouped=grouped)
 
 # === Upload bộ dữ liệu mới ===
 @app.route("/upload", methods=["GET", "POST"])
@@ -102,38 +97,50 @@ def upload_files():
         lsx_file = request.files.get("lsx_file")
         sl_file = request.files.get("sl_file")
         kho_file = request.files.get("kho_file")
+        so_file = request.files.get("so_file")   # 🔹 Thêm file SO
         name = request.form.get("lsx_name")
 
-        if not all([lsx_file, sl_file, kho_file, name]):
+        if not all([lsx_file, sl_file, kho_file, so_file, name]):
             return "Thiếu thông tin upload!", 400
 
+        # 🔹 Tạo thư mục theo ID
         lsx_id = str(uuid4())
         folder = os.path.join(app.config["UPLOAD_FOLDER"], lsx_id)
         os.makedirs(folder, exist_ok=True)
 
+        # 🔹 Lưu file
         lsx_path = os.path.join(folder, "lsx.xlsx").replace("\\", "/")
         sl_path = os.path.join(folder, "sanluong.xlsx").replace("\\", "/")
         kho_path = os.path.join(folder, "kho.xlsx").replace("\\", "/")
+        so_path = os.path.join(folder, "so.xlsx").replace("\\", "/")  # 🔹 Thêm đường dẫn SO
 
         lsx_file.save(lsx_path)
         sl_file.save(sl_path)
         kho_file.save(kho_path)
+        so_file.save(so_path)  # 🔹 Lưu file SO
 
+        # 🔹 Lưu metadata
         metadata = load_metadata()
         metadata.append({
             "id": lsx_id,
             "name": name,
             "lsx": lsx_path,
             "sanluong": sl_path,
-            "kho": kho_path
+            "kho": kho_path,
+            "so": so_path,   # 🔹 Thêm metadata SO
+            "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
         save_metadata(metadata)
+
+        # 🔹 Tạo báo cáo và lưu log
+        generate_report(lsx_path, sl_path)  
 
         return redirect(url_for("xem_theo_ngay"))
 
     return render_template("upload.html")
 
-# === Chọn LSX đã upload để xem lại ===
+
+
 @app.route("/chon_lsx", methods=["GET"])
 def select_lsx():
     metadata = load_metadata()
@@ -152,4 +159,4 @@ def xem_lsx(lsx_id):
     return render_template("ket_qua_upload.html", data=data, name=selected["name"])
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=True)

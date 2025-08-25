@@ -1,7 +1,7 @@
 import pandas as pd
 import re
-
-
+import os
+from datetime import datetime
 # ==============================
 # 1. XỬ LÝ FILE LỆNH SẢN XUẤT
 # ==============================
@@ -123,67 +123,6 @@ def process_actual(file_path, sheet_name="Data"):
     return df_daily, total_actual
 #3 XỬ LÝ FILE SẢN LƯỢNG KHO
 
-def xu_ly_ton_kho(file_sanluong, file_kho):
-    # Đọc dữ liệu
-    df_sanluong = pd.read_excel(file_sanluong)
-    df_kho = pd.read_excel(file_kho)
-
-    # Bỏ các dòng trống ID Cuộn Bó
-    df_kho = df_kho.dropna(subset=["ID Cuộn Bó"])
-    df_sanluong = df_sanluong.dropna(subset=["ID Cuộn Bó"])
-
-    # Chuẩn hóa kiểu dữ liệu
-    df_kho["ID Cuộn Bó"] = df_kho["ID Cuộn Bó"].astype(str).str.strip()
-    df_sanluong["ID Cuộn Bó"] = df_sanluong["ID Cuộn Bó"].astype(str).str.strip()
-
-    # 1️⃣ Xác định cuộn bó chưa nhập kho
-    id_kho_set = set(df_kho["ID Cuộn Bó"].unique())
-    df_chua_nhap = df_sanluong[~df_sanluong["ID Cuộn Bó"].isin(id_kho_set)].copy()
-
-    # Gộp theo Order để tính tổng khối lượng chưa nhập kho
-    df_chua_nhap_sum = df_chua_nhap.groupby("Order").agg(
-        Số_lượng_chưa_nhập_kho=("Khối lượng", "sum")
-    ).reset_index()
-
-    # 2️⃣ Phân loại tồn kho
-    df_kho["Tồn kho loại"] = df_kho["SO Mapping"].apply(
-        lambda x: "Không tự do" if pd.notna(x) else "Tự do"
-    )
-
-    # 3️⃣ Tổng hợp tồn kho theo Order
-    summary = df_kho.groupby("Order").agg(
-        Tổng_tồn_kho_tự_do=("Khối lượng", lambda x: x[df_kho.loc[x.index, "Tồn kho loại"] == "Tự do"].sum()),
-        Tổng_tồn_kho_mapping_SO=("Khối lượng", lambda x: x[df_kho.loc[x.index, "Tồn kho loại"] == "Không tự do"].sum()),
-        Tổng_tồn_kho=("Khối lượng", "sum")
-    ).reset_index()
-
-    # 4️⃣ Merge thêm cột số lượng chưa nhập kho
-    summary = summary.merge(df_chua_nhap_sum, on="Order", how="left").fillna(0)
-    # Đổi tên cột
-    summary = summary.rename(columns={
-        "Order": "Mã Order",
-        "Tổng_tồn_kho_tự_do": "Tồn kho chưa Mapping SO",
-        "Tổng_tồn_kho_mapping_SO": "Tồn kho Mapping SO",
-        "Tổng_tồn_kho": "Tổng tồn kho",
-        "Số_lượng_chưa_nhập_kho": "Số lượng chờ nhập kho"
-    })
-
-    # Bỏ .0 trong Order
-    summary["Mã Order"] = summary["Mã Order"].astype(str).str.replace(r"\.0$", "", regex=True)
-
-    # Chuyển số về dạng int nếu không cần phần thập phân
-    for col in ["Tồn kho chưa Mapping SO", "Tồn kho Mapping SO", "Tổng tồn kho", "Số lượng chờ nhập kho"]:
-        summary[col] = summary[col].astype(int)
-
-    return summary
-    # # 5️⃣ Xuất ra file Excel
-    # with pd.ExcelWriter(output_path) as writer:
-    #     df_chua_nhap_sum.to_excel(writer, sheet_name="Chưa nhập kho", index=False)
-    #     summary.to_excel(writer, sheet_name="Tồn kho theo Order", index=False)
-
-# ==============================
-# 3. PHÂN LOẠI TRẠNG THÁI
-# ==============================
 def classify(row):
     if pd.isna(row["SL trung bình/ngày"]):
         return "Chờ LSX mới"
@@ -206,47 +145,210 @@ def generate_report(lsx_path, actual_path):
     df_req = process_lsx(lsx_path)                  
     df_daily, total_actual = process_actual(actual_path)  
 
-    # lấy phạm vi hiệu lực LSX toàn cục
     lsx_start, lsx_end = get_lsx_range_from_file(lsx_path)
 
-    # merge dữ liệu
     df_report = df_daily.merge(df_req, on="Order", how="left")
     df_report = df_report.merge(total_actual, on="Order", how="left")
 
-    # check phạm vi hiệu lực LSX
     if lsx_start and lsx_end:
         df_report["Trong_khoang_LSX"] = (
-            (df_report["Ngày"] >= lsx_start) &
+            (df_report["Ngày"] >= lsx_start) & 
             (df_report["Ngày"] <= lsx_end)
         )
     else:
         df_report["Trong_khoang_LSX"] = False
 
-    # 🔴 lọc dữ liệu: giữ lại trong khoảng LSX hoặc chưa có LSX (NaN)
     df_report = df_report[
         df_report["Trong_khoang_LSX"] | df_report["SL trung bình/ngày"].isna()
     ]
 
-    # phân loại trạng thái
     df_report["Trạng thái"] = df_report.apply(classify, axis=1)
 
-    return df_report
-# ==============================
-# 5. CHẠY CHÍNH
-# ==============================
-# if __name__ == "__main__":
-#     generate_report(
-#         lsx_path="05.07.2025 LSX XC NM.HRC1 (ok).xlsx",
-#         actual_path="ZBC04B_EXPORT_20250805_133956.xlsx"
-#     )
+    # 🔹 Nếu có yêu cầu thì lưu ra file JSON để giữ lịch sử
 
-# if __name__ == "__main__":
-#     xu_ly_ton_kho(
-#     file_sanluong="EXPORT_20250812_085402.xlsx",
-#     file_kho="ZPP04.xlsx",
-#     output_path="ket_qua_ton_kho_theo_order.xlsx"
-#     )
-#     generate_report(
-#         lsx_path="02.08.2025 LSX XC NM.HRC1 1.xlsx",
-#         actual_path="EXPORT_20250812_085402.xlsx"
-#     )
+    return df_report
+
+
+def xu_ly_ton_kho(file_sanluong, file_kho):
+
+    # Đọc dữ liệu
+    df_sanluong = pd.read_excel(file_sanluong)
+    df_kho = pd.read_excel(file_kho)
+
+    # Bỏ các dòng trống ID Cuộn Bó
+    df_kho = df_kho.dropna(subset=["ID Cuộn Bó"])
+    df_sanluong = df_sanluong.dropna(subset=["ID Cuộn Bó"])
+
+    # Chuẩn hóa kiểu dữ liệu
+    df_kho["ID Cuộn Bó"] = df_kho["ID Cuộn Bó"].astype(str).str.strip()
+    df_sanluong["ID Cuộn Bó"] = df_sanluong["ID Cuộn Bó"].astype(str).str.strip()
+
+    # 1️⃣ Xác định cuộn bó chưa nhập kho
+    id_kho_set = set(df_kho["ID Cuộn Bó"].unique())
+    df_chua_nhap = df_sanluong[~df_sanluong["ID Cuộn Bó"].isin(id_kho_set)].copy()
+
+    # Gộp theo Order để tính tổng khối lượng chưa nhập kho
+    df_chua_nhap_sum = df_chua_nhap.groupby("Order").agg(
+        Số_lượng_chưa_nhập_kho=("Khối lượng", "sum"),
+        Material_Description=("Material Description", "first")   # Lấy mô tả vật liệu
+    ).reset_index()
+
+    # 2️⃣ Phân loại tồn kho
+    df_kho["Tồn kho loại"] = df_kho["SO Mapping"].apply(
+        lambda x: "Không tự do" if pd.notna(x) else "Tự do"
+    )
+
+    # 3️⃣ Tổng hợp tồn kho theo Order
+    summary = df_kho.groupby("Order").agg(
+        Material_Description=("Material Description", "first"),  # Lấy mô tả vật liệu
+        Tổng_tồn_kho_tự_do=("Khối lượng", lambda x: x[df_kho.loc[x.index, "Tồn kho loại"] == "Tự do"].sum()),
+        Tổng_tồn_kho_mapping_SO=("Khối lượng", lambda x: x[df_kho.loc[x.index, "Tồn kho loại"] == "Không tự do"].sum()),
+        Tổng_tồn_kho=("Khối lượng", "sum")
+    ).reset_index()
+
+    # 4️⃣ Merge thêm cột số lượng chưa nhập kho
+    summary = summary.merge(df_chua_nhap_sum, on=["Order", "Material_Description"], how="outer").fillna(0)
+
+    # Đổi tên cột
+    summary = summary.rename(columns={
+        "Order": "Mã Order",
+        "Material_Description": "Material Description",  # ✅ sửa tên cột về giống file SO
+        "Tổng_tồn_kho_tự_do": "Tồn kho chưa Mapping SO",
+        "Tổng_tồn_kho_mapping_SO": "Tồn kho Mapping SO",
+        "Tổng_tồn_kho": "Tổng tồn kho",
+        "Số_lượng_chưa_nhập_kho": "Số lượng chờ nhập kho"
+})
+
+
+    # Bỏ .0 trong Order
+    summary["Mã Order"] = summary["Mã Order"].astype(str).str.replace(r"\.0$", "", regex=True)
+
+    # Chuyển số về dạng int nếu không cần phần thập phân
+    for col in ["Tồn kho chưa Mapping SO", "Tồn kho Mapping SO", "Tổng tồn kho", "Số lượng chờ nhập kho"]:
+        summary[col] = summary[col].astype(int)
+
+    return summary
+
+def process_so_file(file1_path, file2_path):
+
+    # ===== 1. Đọc file1 và tính tiến độ =====
+    df1 = pd.read_excel(file1_path, skiprows=2)
+    print(f"Số dòng trong file1: {len(df1)}")
+    print("Các cột trong file1:", df1.columns.tolist())
+
+    # Tính tiến độ (Process) cho từng SO + Material
+    df1['Process'] = df1.apply(
+        lambda row: (row['Shipped Quantity (KG)'] / row['Quantity (KG)'] * 100)
+        if row['Quantity (KG)'] > 0 else 0,
+        axis=1
+    ).round(2)
+
+    # Chỉ giữ các cột cần thiết
+    df1_processed = df1[['Sales Document', 'Material','Shipped Quantity (KG)','Quantity (KG)', 'Process']].copy()
+
+    # ===== 2. Đọc file2 (thông tin Order, Material Description, Customer N) =====
+    df2 = pd.read_excel(file2_path)
+
+    # ===== 3. Merge hai DataFrame =====
+    merged_df = pd.merge(
+        df2,
+        df1_processed,
+        left_on=['SO Mapping', 'Material'],
+        right_on=['Sales Document', 'Material'],
+        how='inner'
+    )
+
+    # ===== 4. Chuẩn hóa dữ liệu =====
+    for col in ['Order','SO Mapping','Material Description','Customer N','Process']:
+        if merged_df[col].dtype == 'object':  # chỉ áp dụng với cột chuỗi
+            merged_df[col] = merged_df[col].str.strip()
+    
+    # Chuyển kiểu dữ liệu
+    merged_df['Process'] = merged_df['Process'].astype(float)
+    merged_df['Order'] = merged_df['Order'].astype(str)
+    merged_df['SO Mapping'] = merged_df['SO Mapping'].astype(str)
+
+    # ===== 5. Loại bỏ trùng lặp =====
+    merged_df = merged_df.drop_duplicates(
+        subset=['Order','SO Mapping','Material Description','Customer N','Process']
+    )
+
+    # ===== 6. Lấy các cột cần xuất =====
+    merged_df1 = merged_df[['Order','SO Mapping', 'Material Description','Customer N','Shipped Quantity (KG)','Quantity (KG)','Process']]
+    return merged_df1
+
+def xu_ly_ton_kho_full(file_sl, file_kh, file_so):
+    # --- B1: Xử lý file tồn kho ---
+    data1 = xu_ly_ton_kho(file_sl, file_kh)
+    data1 = data1.rename(columns={"Mã Order": "Order"})
+    data1['Order'] = pd.to_numeric(data1['Order'], errors="coerce").fillna(0).astype(int)
+
+    # --- B2: Xử lý file SO ---
+    data2 = process_so_file(file_so, file_kh)
+    data2['Order'] = pd.to_numeric(data2['Order'], errors="coerce").fillna(0).astype(int)
+
+    # --- B3: Merge 2 bảng ---
+    data = pd.merge(
+        data1,
+        data2,
+        how='left',   # Giữ tất cả Order trong data1
+        on=["Order", "Material Description"]
+    )
+
+    # --- B4: Thêm dòng "Chưa có SO" cho tồn kho chưa mapping ---
+    rows_to_add = []
+    for _, row in data1.iterrows():
+        if row["Tồn kho Mapping SO"] == 0:
+            rows_to_add.append({
+                "Order": row["Order"],
+                "Tồn kho chưa Mapping SO": row["Tồn kho chưa Mapping SO"],
+                "Tồn kho Mapping SO": row["Tồn kho Mapping SO"],
+                "Tổng tồn kho": row["Tổng tồn kho"],
+                "Số lượng chờ nhập kho": row["Số lượng chờ nhập kho"],
+                "SO Mapping": "Chưa có SO",
+                "Material Description": row["Material Description"],
+                "Customer N": "Chưa có SO",
+                "Shipped Quantity (KG)": 0,
+                "Quantity (KG)": 0,
+                "Process": 0
+            })
+
+    if rows_to_add:
+        data = pd.concat([data, pd.DataFrame(rows_to_add)], ignore_index=True)
+
+    # --- B5: Fill NaN ---
+    data = data.fillna({
+        "SO Mapping": "Chưa có SO",
+        "Shipped Quantity (KG)": 0,
+        "Quantity (KG)": 0,
+        "Process": 0
+    })
+
+    # --- B6: Ép kiểu số cho các cột số ---
+    num_cols = [
+        "Tồn kho chưa Mapping SO","Tồn kho Mapping SO","Tổng tồn kho","SO Mapping",
+        "Số lượng chờ nhập kho","Shipped Quantity (KG)",
+        "Quantity (KG)","Process"
+    ]
+    for col in num_cols:
+        data[col] = pd.to_numeric(data[col], errors="coerce").fillna(0).astype(int)
+
+    return data
+def load_data(file_sl, file_kh, file_so):
+    df=xu_ly_ton_kho_full(file_sl, file_kh, file_so)
+    # Sort dữ liệu
+    df = df.sort_values(by=['Order', 'Material Description', 'SO Mapping'])
+
+    grouped = []
+    for (order, material), group in df.groupby(['Order','Material Description']):
+        grouped.append({
+            'Order': order,
+            'Material': material,
+            'TonKhoChuaMapping': group['Tồn kho chưa Mapping SO'].iloc[0],
+            'TonKhoMapping': group['Tồn kho Mapping SO'].iloc[0],
+            'TongTonKho': group['Tổng tồn kho'].iloc[0],
+            'ChoNhapKho': group['Số lượng chờ nhập kho'].iloc[0],
+            'SOs': group[['SO Mapping','Shipped Quantity (KG)','Quantity (KG)','Process']].to_dict(orient='records')
+        })
+    return grouped
+
